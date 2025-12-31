@@ -5,7 +5,17 @@ import zipfile
 from io import BytesIO
 from backend.aipipeline import runbatch_pipeline
 import base64
-from io import BytesIO
+import matplotlib.colors as mcolors
+
+@st.cache_data
+def load_color_database():
+    # This pulls the 949 colors from matplotlib and cleans the names
+    # Example: 'xkcd:sky blue' -> 'Sky Blue'
+    return {name.replace('xkcd:', '').title(): hex_val.upper() 
+            for name, hex_val in mcolors.XKCD_COLORS.items()}
+
+COLOR_DATABASE = load_color_database()
+
 
 
 st.set_page_config(
@@ -18,7 +28,8 @@ if 'focused_idx' not in st.session_state:
     st.session_state['focused_idx'] = None
 if 'results' not in st.session_state:
     st.session_state['results'] = None
-
+if 'color_queue' not in st.session_state:
+    st.session_state['color_queue'] = []
 # 2. THE AESTHETIC CSS
 st.markdown("""
     <style>
@@ -90,6 +101,7 @@ st.markdown("""
     """, unsafe_allow_html=True)
 
 # 3. SIDEBAR: Config & Download Zone
+selected_names=[]
 with st.sidebar:
     st.markdown("## Configuration")
     
@@ -110,43 +122,37 @@ with st.sidebar:
     st.divider()
     st.markdown("## 🎨 Select Colors")
 
-    standard_shades = {
-    "Olive Green": "#828e5c",
-    "Classic Black": "#000000",
-    "Pure White": "#FFFFFF",
-    "Navy Blue": "#000080",
-    "Crimson Red": "#B22222"
-    }
+    if 'custom_added' not in st.session_state:
+        st.session_state['custom_added'] = {}
 
-# ONLY ONE multiselect here, with a unique key
-    selected_colors = st.multiselect(
-    "Choose colors to generate:",
-    options=list(standard_shades.keys()),
-    default=None, 
-    placeholder="Choose one or more colors...",
-    key="dropdown_colors"  # <--- Unique ID
+    # Merge the 900+ standard colors with user-added custom ones
+    all_options = {**COLOR_DATABASE, **st.session_state['custom_added']}
+
+    # 1. Searchable Multiselect (Type 'Teal', 'Sage', etc. here)
+    selected_names = st.multiselect(
+        "Search & Select Colors:",
+        options=list(all_options.keys()),
+        placeholder="Type to search 900+ colors..."
     )
 
-    st.markdown("---")
-    st.markdown("### 🧪 Test: Custom Color Picker")
+    # 2. Rare Occasion: Custom Picker
+    with st.expander("➕ Add Rare/Custom Color"):
+        c_hex = st.color_picker("Pick Hex:", "#828e5c")
+        c_name = st.text_input("Name this color:", placeholder="e.g. Pantone 18-0107")
+        if st.button("Add to List"):
+            if c_name:
+                st.session_state['custom_added'][c_name] = c_hex.upper()
+                st.success(f"Added {c_name} to library!")
+                st.rerun()
 
-# Add a key here as well for safety
-    custom_color = st.color_picker(
-    "Pick a single custom color to test:", 
-    "#828e5c", 
-    key="manual_color_picker"
-    )
+    if st.button("🗑️ Clear Selection"):
+        st.session_state['custom_added'] = {}
+        st.rerun()
 
-    use_custom = st.checkbox(
-    "Include this custom color in batch", 
-    key="custom_color_toggle"
-    )
-
-    
     st.markdown("## Export")
     download_placeholder = st.empty()
     download_placeholder.info("Waiting For Generation")
-
+    
 # 4. MAIN PAGE: Centered Hero
 st.markdown('<h1 class="main-title">V2 CREATIVE STUDIO</h1>', unsafe_allow_html=True)
 st.markdown('<p class="main-subtitle">High-Fidelity Fashion Synthesis Engine</p>', unsafe_allow_html=True)
@@ -170,34 +176,48 @@ if st.button("✨ START BATCH GENERATION"):
     elif not design_files:
         st.error("⚠️ Please upload at least one Cloth Design.")
     else:
-        # 1. Combine Dropdown Colors + Custom Picker Color
-        # We start with the list from your multiselect
-        colors_to_process = selected_colors.copy() if selected_colors else []
-        
-        # 2. If you checked the "Include Custom Color" box, add it to the list
-        if use_custom:
-            colors_to_process.append(custom_color)
-            
         all_results = []
-        with st.status("🔮 V2 Neural Engine is rendering...", expanded=True) as status:
+        # Ensure all_options is accessible here (it was defined in your sidebar)
+        all_options = {**COLOR_DATABASE, **st.session_state.get('custom_added', {})}
+        
+        with st.status("🔮 V2 Neural Engine Rendering...", expanded=True) as status:
             
-            # 3. Check if we have ANY colors (Dropdown or Picker)
-            if colors_to_process:
-                for color_val in colors_to_process:
-                    st.write(f"🎨 Rendering {color_val}...")
-                    # Pass the name or hex code to the backend
-                    batch_res = runbatch_pipeline(design_files, gender, body_type, pattern_file, color_val)
+            # Use 'selected_names' which comes from your st.multiselect
+            if selected_names:
+                for name in selected_names:
+                    # Map the readable name (e.g., 'Teal') back to its Hex code
+                    hex_val = all_options.get(name)
+                    
+                    st.write(f"🎨 Rendering Color: **{name}** ({hex_val})...")
+                    
+                    # Call the pipeline
+                    batch_res = runbatch_pipeline(
+                        design_files, 
+                        gender, 
+                        body_type, 
+                        pattern_file, 
+                        color_name=hex_val
+                    )
                     all_results.extend(batch_res)
+            
+            # FALLBACK: If no colors were selected in the multiselect
             else:
-                # Fallback to original if both are empty
-                st.write("✨ Rendering Original Designs...")
-                batch_res = runbatch_pipeline(design_files, gender, body_type, pattern_file, None)
+                st.write("✨ Rendering Original Designs (No color override)...")
+                batch_res = runbatch_pipeline(
+                    design_files, 
+                    gender, 
+                    body_type, 
+                    pattern_file, 
+                    color_name=None
+                )
                 all_results.extend(batch_res)
 
+            # Store results and refresh UI
             st.session_state['results'] = all_results
             st.session_state['focused_idx'] = None 
-            status.update(label="✅ Generation Complete!", state="complete", expanded=False)
+            status.update(label="✅ Batch Complete!", state="complete", expanded=False) 
             st.rerun()
+            
 # --- 6. PREVIEW & ZOOM LOGIC (The rest of the logic) ---
 if st.session_state.get('results'):
     results = st.session_state['results']
@@ -225,7 +245,7 @@ if st.session_state.get('results'):
         grid = st.columns(3)
         for i, res in enumerate(results):
             with grid[i % 3]:
-                st.image(res['output'], use_container_width=True)
+                st.image(res['output'], use_container_width=True,caption=None)
                 if st.button(f"🔍 Zoom {i+1}", key=f"z_{i}"):
                     st.session_state['focused_idx'] = i
                     st.rerun()

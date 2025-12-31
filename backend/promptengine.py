@@ -23,13 +23,17 @@ def buildprompt(condition, gender, bodytype, pattern_name='none', color_name=Non
             framing_desc ="lower garment focused framing, highlighting fabric drape"
             
     match color_name:
+        # Case 1: User provided a Hex Code (e.g., #828e5c)
         case str() if color_name.startswith("#"):
             color_instr = f" The garment must be rendered in the specific hex color code {color_name}."
+        
+        # Case 2: User provided a Name (e.g., Olive Green)
         case str() if len(color_name) > 0:
             color_instr = f" The garment should be rendered in a professional {color_name} shade."
+        
+        # Case 3: color_name is None or empty (THE FALLBACK)
         case _:
-            color_instr = ""
-
+            color_instr = " Maintain the original colors and textures of the uploaded garment reference."
     base = (
         f"Commercial e-commerce product photography of a {model_desc}. "
         f"Technical framing: {framing_desc}. High-key studio lighting, clean gray background. "
