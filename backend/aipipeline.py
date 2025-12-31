@@ -17,18 +17,31 @@ client = genai.Client(api_key=os.getenv("GEMINIAPI_KEY"))
 def run_singlegeneration(shirtfile, gender, bodytype, patternfile=None, color_name=None):
     try:
         processed_shirt = prepareimage(shirtfile)
+        negative_constraints = (
+            " NEGATIVE_CONSTRAINTS: Do not change the neckline. Do not add collars. "
+            "Do not add buttons. Do not change the garment silhouette. Do not remove hair. "
+            "The model MUST have a natural hairstyle. No bald heads."
+        )
         
         if patternfile:
             processed_pattern = prepareimage(patternfile)
             prompt_text = buildprompt('texture overlay', gender, bodytype,color_name=color_name)
-            content_list = [prompt_text, processed_shirt, processed_pattern]
+            content_list = [
+                "OBJECTIVE: Apply the texture from the PATTERN_IMAGE to the garment in the SOURCE_IMAGE.",
+                "SOURCE_IMAGE:", processed_shirt, 
+                "PATTERN_IMAGE:", processed_pattern,
+                prompt_text
+            ]
         else:
             prompt_text = buildprompt('virtual try on', gender, bodytype,color_name=color_name)
-            content_list = [prompt_text, processed_shirt]
-
+            content_list = [
+                "OBJECTIVE: Change the color of the garment in the SOURCE_IMAGE while keeping the shape identical.",
+                "SOURCE_IMAGE:", processed_shirt,
+                prompt_text
+            ]
         # Use the 2.5 Flash Image model
         response = client.models.generate_content(
-            model='gemini-2.5-flash-image',
+            model='gemini-3-pro-image-preview',
             contents=content_list,
             config=types.GenerateContentConfig(
                 response_modalities=["IMAGE"],
