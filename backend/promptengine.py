@@ -18,12 +18,12 @@ def buildprompt(condition, gender, bodytype, pattern_name='none', color_name=Non
             model_desc=("Full-featured professional female fashion model, realistic human skin, "
                         "natural flowing hairstyle with individual hair strands visible, "
                         "elegant neutral expression, lifelike human features"
-                         "[OUTFIT COMPLETION RULE]: Analyze the length of the uploaded garment. "
-                "1. IF the garment is a top, shirt, or short kurti: The model MUST wear matching professional "
-                "straight-fit trousers or leggings to ensure a complete modest look. "
-                "2. IF the garment is a full-length dress or jumpsuit: Do NOT add pants; "
-                "render the dress as a single complete piece. "
-                "Ensure no bare thighs are visible for tops; focus on a realistic, retail-ready catalog appearance.")
+                         "[DYNAMIC OUTFIT RULE]: Analyze the garment type in SOURCE_IMAGE. "
+                          "1. IF the garment is a TOP (shirt, kurti, blouse): The model MUST wear matching "
+                          "professional straight-fit trousers to ensure a modest look. "
+                          "2. IF the garment is a BOTTOM or FULL OUTFIT (shorts, pants, skirt, maxi dress): "
+                          "Do NOT add extra trousers. Render the garment exactly as it is without layering. "
+                          "Ensure the output reflects a logical, single-layer retail outfit.")
 
 
     match bodytype:
@@ -43,7 +43,7 @@ def buildprompt(condition, gender, bodytype, pattern_name='none', color_name=Non
             length_guard=" [STRUCTURAL LOCK]: Preserve the original crop and hemline position relative to the waist."
         case _:
             framing_desc ="lower garment focused framing, highlighting fabric drape"
-            length_guard=""
+            length_guard=" [FEATURE LOCK]: Sharp focus on pocket geometry and hemline drape. Do not blur edges."
             
     match color_name:
         # Case 1: User provided a Hex Code (e.g., #828e5c)
@@ -61,7 +61,11 @@ def buildprompt(condition, gender, bodytype, pattern_name='none', color_name=Non
         
         # Case 3: color_name is None or empty (THE FALLBACK)
         case _:
-            color_instr =" Maintain the original colors and textures of the uploaded garment reference."
+            color_instr =(" [STRICT DATA LOCK]: MANDATORY. Do not modify, simplify, or re-render the "
+                        "original fabric colors or textures. You must perform a bit-by-bit transfer "
+                "of the source garment's factory wash, distress marks, and color gradients. "
+                "CRITICAL: The output garment must be a 100% pixel-accurate match to the "
+                "SOURCE_IMAGE in terms of hue, saturation, and textile finish.")
     base = (
         f"Commercial e-commerce product photography of a {model_desc} on a real human model. "
         "The output must never be a mannequin or a flat-lay garment on a table. "
@@ -73,13 +77,12 @@ def buildprompt(condition, gender, bodytype, pattern_name='none', color_name=Non
     match condition.lower():
         case "simple try on" | "virtual try on":
             return base + color_instr + (
-                " [UNIVERSAL STRUCTURE LOCK]: You must follow the EXACT hemline and "
-        "silhouette boundaries of the SOURCE_IMAGE. "
-        "DO NOT EXTEND THE FABRIC. If the shirt is short, it must stay short. "
-        "If the sleeves are half-length, they must stay half-length. "
-        "Maintain the precise 1:1 structural ratio of the uploaded garment. "
-        "The background and the model's skin should be visible exactly where "
-        "the garment ends in the original photo."
+            " [COMMAND: UNIFIED ANCHOR & CLEAN]: You must merge the SOURCE_IMAGE with the model's anatomy. "
+                "1. NO FLOATING: The garment must be 100% attached to the model's body, following their pose and gravity. "
+                "2. PATTERN LOCK: Transfer the EXACT textile print, graphics, and embroidery with bit-by-bit accuracy. "
+                "3. CLUTTER REMOVAL: Do not render price tags, paper labels, or extra fabric bundles from the source. "
+                "4. EMPTY HANDS: The model's hands must be empty; remove any cloth held in their arms. "
+                "5. CLEAN BORDERS: Ensure the garment ends naturally against the skin or background with no artifacts."
             )
        
 
