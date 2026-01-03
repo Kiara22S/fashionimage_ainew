@@ -30,10 +30,26 @@ if 'results' not in st.session_state:
     st.session_state['results'] = None
 if 'color_queue' not in st.session_state:
     st.session_state['color_queue'] = []
+#--cost tracking-- 
+if 'total_images_generated' not in st.session_state:
+    st.session_state['total_images_generated'] = 0
+if 'usage_history' not in st.session_state:
+    st.session_state['usage_history'] = []
+    
+    
 # 2. THE AESTHETIC CSS
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@200;400;600&display=swap');
+    [data-testid="stSidebar"] [data-testid="stMetricLabel"] p {
+        color: white !important;
+    }
+    [data-testid="stSidebar"] [data-testid="stMetricValue"] div {
+        color: white !important;
+    }
+    [data-testid="stSidebar"] .stMarkdown p {
+        color: white !important;
+    }
     
     /* 1. MANAGE HEADER: Transparent background, keep toggle interactive */
     header[data-testid="stHeader"] {
@@ -41,15 +57,33 @@ st.markdown("""
         color: white !important;
     }
 
-    /* 2. SIDEBAR TOGGLE: Force visibility and clickability */
+     /* 1. Target the button area and force it to be interactive */
     [data-testid="collapsedControl"] {
         visibility: visible !important;
-        color: white !important;
-        background-color: rgba(255, 255, 255, 0.1) !important;
-        border-radius: 0 10px 10px 0 !important;
+        background-color: #ffffff !important;
         z-index: 999999 !important;
     }
 
+    /* 2. FORCE THE ICON TO WHITE */
+    /* This targets the specific icon pointed at by your cursor */
+    [data-testid="collapsedControl"] button svg, 
+    [data-testid="stHeader"] button svg,
+    .st-emotion-cache-p4m0yw svg {
+        fill: #FFFFFF !important;
+        color: #FFFFFF !important;
+        stroke: #FFFFFF !important;
+        width: 28px !important;
+        height: 28px !important;
+    }
+    /* 3. Handle the 'Collapsed' state specifically */
+    button[kind="headerNoPadding"] {
+        color: white !important;
+    }
+
+    /* 3. Target the button element directly if the SVG selector fails */
+    header button {
+        color: white !important;
+    }
     /* 3. BACKGROUND & GLOBAL FONT */
     .stApp {
         background: radial-gradient(circle at top right, #34421e, #0f1208);
@@ -148,7 +182,29 @@ with st.sidebar:
     if st.button("🗑️ Clear Selection"):
         st.session_state['custom_added'] = {}
         st.rerun()
+    st.divider()
+    st.markdown("## Usage & Billing")
+    
+    # Retrieve the total from session state (initialized at the top of your script)
+    total_imgs = st.session_state.get('total_images_generated', 0)
+    
+    st.metric("Total Images Created", total_imgs)
+    st.metric("Estimated Cost", f"${total_imgs * 0.02:.2f}")# here pls cange the cost peer image acc to the acctual coast
 
+    # Only show the download report button if images have actually been made
+    if total_imgs > 0:
+        # Create CSV data from the history
+        csv_report = "Time,Images,Gender,Frame\n"
+        for entry in st.session_state.get('usage_history', []):
+            csv_report += f"{entry['Time']},{entry['Count']},{entry['Gender']},{entry['Body']}\n"
+        
+        st.download_button(
+            label="📊 DOWNLOAD USAGE REPORT",
+            data=csv_report,
+            file_name=f"V2_Retail_Usage_{time.strftime('%Y-%m-%d')}.csv",
+            mime="text/csv",
+            key="billing_report_btn"
+          )
     st.markdown("## Export")
     download_placeholder = st.empty()
     download_placeholder.info("Waiting For Generation")
@@ -210,7 +266,19 @@ if st.button("✨ START BATCH GENERATION"):
                     pattern_file, 
                     color_name=None
                 )
-                all_results.extend(batch_res)
+            all_results.extend(batch_res)
+            generated_count = len(all_results)
+            
+            # 2. Add to the total grand counter
+            st.session_state['total_images_generated'] += generated_count
+            
+            # 3. Add a line to the history log for the CSV report
+            st.session_state['usage_history'].append({
+                "Time": time.strftime("%H:%M:%S"), 
+                "Count": generated_count, 
+                "Gender": gender, 
+                "Body": body_type
+                })
 
             # Store results and refresh UI
             st.session_state['results'] = all_results
