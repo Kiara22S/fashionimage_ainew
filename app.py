@@ -1,5 +1,11 @@
 
+import sys
+print(f"Python version: {sys.version}")
+print(f"Python executable: {sys.executable}")
+
 import streamlit as st
+print(f"Streamlit version: {st.__version__}")
+
 import time
 import zipfile
 from io import BytesIO
