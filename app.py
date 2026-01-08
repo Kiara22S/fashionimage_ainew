@@ -307,7 +307,7 @@ if st.session_state.get('results'):
     if f_idx is not None:
         # ZOOM VIEW
         res = results[f_idx]
-        st.image(res['output'], use_container_width=True)
+        st.image(res['output'], width=None)
         st.caption(f"**{res['file_name']}** - {res.get('view', 'View').upper()}")
         if st.button("⬅️ Back to Gallery"):
             st.session_state['focused_idx'] = None
@@ -327,7 +327,7 @@ if st.session_state.get('results'):
                 if col_idx < 4:
                     with cols[col_idx]:
                         if not isinstance(res['output'], str):
-                            st.image(res['output'], use_container_width=True)
+                            st.image(res['output'], width=None)
                             st.caption(res.get('view', 'View').upper())
                             if st.button(f"🔍 Zoom", key=f"z_{result_idx}"):
                                 st.session_state['focused_idx'] = result_idx
