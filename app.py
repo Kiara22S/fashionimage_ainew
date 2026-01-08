@@ -189,7 +189,7 @@ with st.sidebar:
     total_imgs = st.session_state.get('total_images_generated', 0)
     
     st.metric("Total Images Created", total_imgs)
-    st.metric("Estimated Cost", f"${total_imgs * 0.02:.2f}")# here pls cange the cost peer image acc to the acctual coast
+    st.metric("Estimated Cost", f"${total_imgs * 0.02:.2f}")# here pls change the cost peer image acc to the acctual coast
 
     # Only show the download report button if images have actually been made
     if total_imgs > 0:
@@ -252,7 +252,8 @@ if st.button("✨ START BATCH GENERATION"):
                         gender, 
                         body_type, 
                         pattern_file, 
-                        color_name=hex_val
+                        color_name=hex_val,
+                        generate_all_views=True
                     )
                     all_results.extend(batch_res)
             
@@ -264,7 +265,8 @@ if st.button("✨ START BATCH GENERATION"):
                     gender, 
                     body_type, 
                     pattern_file, 
-                    color_name=None
+                    color_name=None,
+                    generate_all_views=True
                 )
             all_results.extend(batch_res)
             generated_count = len(all_results)
@@ -298,25 +300,40 @@ if st.session_state.get('results'):
             if not isinstance(res['output'], str):
                 img_io = BytesIO()
                 res['output'].save(img_io, format='PNG') 
-                zf.writestr(f"V2_Render_{i+1}.png", img_io.getvalue())
+                view_label = res.get('view', 'unknown').replace(' ', '_')
+                zf.writestr(f"V2_Render_{res['file_name'].split('.')[0]}_{view_label}_{i+1}.png", img_io.getvalue())
 
     # --- VIEW TOGGLE ---
     if f_idx is not None:
         # ZOOM VIEW
         res = results[f_idx]
         st.image(res['output'], use_container_width=True)
+        st.caption(f"**{res['file_name']}** - {res.get('view', 'View').upper()}")
         if st.button("⬅️ Back to Gallery"):
             st.session_state['focused_idx'] = None
             st.rerun()
     else:
-        # GRID VIEW
-        grid = st.columns(3)
+        # GRID VIEW - Group by file name, display 4 views per design
+        from collections import defaultdict
+        grouped_results = defaultdict(list)
         for i, res in enumerate(results):
-            with grid[i % 3]:
-                st.image(res['output'], use_container_width=True,caption=None)
-                if st.button(f"🔍 Zoom {i+1}", key=f"z_{i}"):
-                    st.session_state['focused_idx'] = i
-                    st.rerun()
+            grouped_results[res['file_name']].append((i, res))
+        
+        for file_name, items in grouped_results.items():
+            st.markdown(f"### {file_name}")
+            # Create 4-column layout for front, back, left, right
+            cols = st.columns(4)
+            for col_idx, (result_idx, res) in enumerate(items):
+                if col_idx < 4:
+                    with cols[col_idx]:
+                        if not isinstance(res['output'], str):
+                            st.image(res['output'], use_container_width=True)
+                            st.caption(res.get('view', 'View').upper())
+                            if st.button(f"🔍 Zoom", key=f"z_{result_idx}"):
+                                st.session_state['focused_idx'] = result_idx
+                                st.rerun()
+                        else:
+                            st.error(res['output'])
 
     # --- SIDEBAR DOWNLOADS ---
     with st.sidebar:

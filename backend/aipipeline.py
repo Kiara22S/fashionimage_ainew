@@ -14,28 +14,35 @@ load_dotenv()
 # Initialize the 2025 Client
 client = genai.Client(api_key=os.getenv("GEMINIAPI_KEY"))
 
-def run_singlegeneration(shirtfile, gender, bodytype, patternfile=None, color_name=None):
+def run_singlegeneration(shirtfile, gender, bodytype, patternfile=None, color_name=None, view_direction="front"):
     try:
         processed_shirt = prepareimage(shirtfile)
-        negative_constraints = (
-            " NEGATIVE_CONSTRAINTS: Do not change the neckline. Do not add collars. "
-            "Do not add buttons. Do not change the garment silhouette. Do not remove hair. "
-            "The model MUST have a natural hairstyle. No bald heads."
+        
+        # CRITICAL: Place color lock at the very start
+        color_lock_instruction = (
+            "🔴 CRITICAL COLOR LOCK - READ FIRST: "
+            "The garment color/pattern MUST be IDENTICAL to the SOURCE_IMAGE. "
+            "No color shifts. No shade changes. Exact same color in every view. "
+            "If the source is navy blue, output MUST be navy blue. "
+            "If the source has a pattern, output MUST have the EXACT same pattern. "
+            "NO EXCEPTIONS. NO COLOR VARIATION."
         )
         
         if patternfile:
             processed_pattern = prepareimage(patternfile)
-            prompt_text = buildprompt('texture overlay', gender, bodytype,color_name=color_name)
+            prompt_text = buildprompt('texture overlay', gender, bodytype, color_name=color_name, view_direction=view_direction)
             content_list = [
+                color_lock_instruction,
                 "OBJECTIVE: Apply the texture from the PATTERN_IMAGE to the garment in the SOURCE_IMAGE.",
                 "SOURCE_IMAGE:", processed_shirt, 
                 "PATTERN_IMAGE:", processed_pattern,
                 prompt_text
             ]
         else:
-            prompt_text = buildprompt('virtual try on', gender, bodytype,color_name=color_name)
+            prompt_text = buildprompt('virtual try on', gender, bodytype, color_name=color_name, view_direction=view_direction)
             content_list = [
-                "OBJECTIVE: Change the color of the garment in the SOURCE_IMAGE while keeping the shape identical.",
+                color_lock_instruction,
+                "OBJECTIVE: Render the garment from SOURCE_IMAGE on a model in the specified view. Keep garment color/pattern identical to source.",
                 "SOURCE_IMAGE:", processed_shirt,
                 prompt_text
             ]
@@ -69,18 +76,33 @@ def run_singlegeneration(shirtfile, gender, bodytype, patternfile=None, color_na
         traceback.print_exc()
         raise e
 
-def runbatch_pipeline(uploaded_files, gender, bodytype, pattern_file=None,color_name=None):
+def runbatch_pipeline(uploaded_files, gender, bodytype, pattern_file=None,color_name=None, generate_all_views=True):
     all_results = []
+    views = ["front", "back", "left side", "closeup"] if generate_all_views else ["front"]
+    
     with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
-        future_to_file = {
-            executor.submit(run_singlegeneration, f, gender, bodytype, pattern_file,color_name): f 
-            for f in uploaded_files
-        }
-        for future in concurrent.futures.as_completed(future_to_file):
-            file_name = future_to_file[future].name
+        future_to_info = {}
+        
+        for f in uploaded_files:
+            for view in views:
+                future = executor.submit(run_singlegeneration, f, gender, bodytype, pattern_file, color_name, view)
+                future_to_info[future] = {"file_name": f.name, "view": view}
+        
+        for future in concurrent.futures.as_completed(future_to_info):
+            info = future_to_info[future]
+            file_name = info["file_name"]
+            view = info["view"]
             try:
                 img_obj = future.result()
-                all_results.append({"file_name": file_name, "output": img_obj})
+                all_results.append({
+                    "file_name": file_name, 
+                    "view": view,
+                    "output": img_obj
+                })
             except Exception as e:
-                all_results.append({"file_name": file_name, "output": f"Error: {str(e)}"})
+                all_results.append({
+                    "file_name": file_name, 
+                    "view": view,
+                    "output": f"Error: {str(e)}"
+                })
     return all_results
